@@ -4,22 +4,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Database
-    database_url: str = "postgresql+asyncpg://explainer:explainer@localhost:5432/codebase_explainer"
-    neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "explainer"
+    # Simple demo mode: SQLite + in-memory graph + offline retrieval
+    lite_mode: bool = True
+    graph_backend: str = "memory"
 
-    # LLM
-    openai_api_key: str = ""
-    embedding_model: str = "text-embedding-3-small"
-    chat_model: str = "gpt-4o-mini"
+    # SQLite only for the student demo
+    database_url: str = "sqlite+aiosqlite:///./data/app.db"
+
+    # Optional provider placeholders; the demo runs fully offline by default
+    llm_provider: str = "gemini"
+    gemini_api_key: str | None = None
+
     max_chunk_tokens: int = 512
     retrieval_top_k: int = 8
 
     # Storage
     repos_dir: str = "./data/repos"
-    index_dir: str = "./data/indexes"
     metadata_dir: str = "./data/metadata"
 
     # Resource limits
@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     # Processing
     parse_batch_size: int = 50
     graph_batch_size: int = 200
-    embed_batch_size: int = 100
     parse_workers: int = 4
     job_timeout_seconds: int = 3600
     max_job_retries: int = 3
