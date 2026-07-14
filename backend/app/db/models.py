@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, String, Text, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func, LargeBinary
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -22,7 +22,6 @@ class JobStatus(str, enum.Enum):
 
 class Repository(Base):
     __tablename__ = "repositories"
-    __table_args__ = (Index("ix_repositories_status", "status"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     url: Mapped[str] = mapped_column(String(512), unique=True, index=True)
@@ -41,11 +40,11 @@ class Repository(Base):
     )
 
     analysis_jobs: Mapped[list["AnalysisJob"]] = relationship(back_populates="repository")
+    chunks: Mapped[list["RepositoryChunk"]] = relationship(back_populates="repository")
 
 
 class AnalysisJob(Base):
     __tablename__ = "analysis_jobs"
-    __table_args__ = (Index("ix_jobs_repo_status", "repository_id", "status"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
@@ -59,3 +58,20 @@ class AnalysisJob(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     repository: Mapped["Repository"] = relationship(back_populates="analysis_jobs")
+
+
+class RepositoryChunk(Base):
+    __tablename__ = "repository_chunks"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
+    file_path: Mapped[str] = mapped_column(String(1024), index=True)
+    entity_name: Mapped[str] = mapped_column(String(256), index=True)
+    entity_type: Mapped[str] = mapped_column(String(64), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    line_start: Mapped[int | None] = mapped_column(nullable=True)
+    line_end: Mapped[int | None] = mapped_column(nullable=True)
+    embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    repository: Mapped["Repository"] = relationship(back_populates="chunks")

@@ -1,31 +1,29 @@
-import gzip
-import hashlib
-import json
 import logging
-import pickle
+import re
 from collections.abc import Iterator
 from pathlib import Path
-
-import faiss
 import numpy as np
-from openai import OpenAI
+from sentence_transformers import SentenceTransformer
 
 from app.config import settings
-from app.observability.metrics import increment, observe
+from app.db.models import RepositoryChunk
 from app.services.entities import CodeChunk, CodeEntity
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
+_model = None
+def get_model():
+    global _model
+    if _model is None:
+        logger.info("Loading sentence-transformers model...")
+        _model = SentenceTransformer("all-MiniLM-L6-v2")
+    return _model
+
 
 class EmbeddingService:
-    def __init__(self) -> None:
-        self._client = OpenAI(api_key=settings.openai_api_key) if settings.openai_api_key else None
-        self._dimension = 1536
-
-    def _index_path(self, repository_id: str) -> Path:
-        path = Path(settings.index_dir) / repository_id
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+    """Tiny SQLite-backed chunk store and retrieval service for the demo."""
 
     def entity_to_chunk(self, entity: CodeEntity) -> CodeChunk | None:
         if entity.entity_type.value in ("Import",):
@@ -57,127 +55,75 @@ class EmbeddingService:
         )
 
     def iter_chunks(self, entities: list[CodeEntity]) -> Iterator[CodeChunk]:
-        seen_hashes: set[str] = set()
         for entity in entities:
             chunk = self.entity_to_chunk(entity)
             if not chunk:
                 continue
-            content_hash = hashlib.sha256(chunk.content.encode()).hexdigest()
-            if content_hash in seen_hashes:
-                continue
-            seen_hashes.add(content_hash)
             yield chunk
 
-    def _embed_texts(self, texts: list[str]) -> np.ndarray:
-        if not self._client:
-            raise RuntimeError("OpenAI API key not configured")
-        start = __import__("time").perf_counter()
-        response = self._client.embeddings.create(
-            model=settings.embedding_model,
-            input=texts,
-        )
-        observe("embedding_latency_ms", (__import__("time").perf_counter() - start) * 1000)
-        increment("embeddings_generated", len(texts))
-        return np.array([item.embedding for item in response.data], dtype=np.float32)
-
-    def _save_chunks_compressed(self, path: Path, chunks: list[CodeChunk]) -> None:
-        data = pickle.dumps(chunks)
-        with gzip.open(path, "wb", compresslevel=6) as f:
-            f.write(data)
-
-    def _load_chunks_compressed(self, path: Path) -> list[CodeChunk]:
-        with gzip.open(path, "rb") as f:
-            return pickle.load(f)
-
-    def build_index_streaming(self, repository_id: str, chunk_iter: Iterator[CodeChunk]) -> int:
-        """Build FAISS index from chunk iterator — never holds all chunks in RAM."""
-        index_dir = self._index_path(repository_id)
-        batch_size = settings.embed_batch_size
-        all_chunks: list[CodeChunk] = []
-        all_vectors: list[np.ndarray] = []
-
-        batch: list[CodeChunk] = []
-        for chunk in chunk_iter:
-            batch.append(chunk)
-            if len(batch) >= batch_size:
-                vectors = self._embed_texts([c.content for c in batch])
-                all_vectors.append(vectors)
-                all_chunks.extend(batch)
-                batch = []
-                del vectors
-
-        if batch:
-            vectors = self._embed_texts([c.content for c in batch])
-            all_vectors.append(vectors)
-            all_chunks.extend(batch)
-
-        if not all_chunks:
+    async def replace_repository_chunks(self, session: AsyncSession, repository_id: str, chunks: list[CodeChunk]) -> int:
+        await session.execute(delete(RepositoryChunk).where(RepositoryChunk.repository_id == repository_id))
+        if not chunks:
             return 0
 
-        matrix = np.vstack(all_vectors)
-        del all_vectors
+        rows = [
+            RepositoryChunk(
+                id=chunk.id,
+                repository_id=chunk.repository_id,
+                file_path=chunk.file_path,
+                entity_name=chunk.name,
+                entity_type=chunk.entity_type,
+                content=chunk.content,
+                line_start=chunk.line_start,
+                line_end=chunk.line_end,
+            )
+            for chunk in chunks
+        ]
+        session.add_all(rows)
+        return len(rows)
 
-        index = faiss.IndexFlatIP(self._dimension)
-        faiss.normalize_L2(matrix)
-        index.add(matrix)
-        del matrix
+    def generate_embeddings(self, texts: list[str]) -> list[bytes]:
+        if not texts:
+            return []
+        model = get_model()
+        embeddings = model.encode(texts, convert_to_numpy=True)
+        return [emb.astype(np.float32).tobytes() for emb in embeddings]
 
-        faiss.write_index(index, str(index_dir / "index.faiss"))
-        self._save_chunks_compressed(index_dir / "chunks.pkl.gz", all_chunks)
-
-        metadata = {"count": len(all_chunks), "dimension": self._dimension}
-        with open(index_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f)
-
-        logger.info("Built index for %s: %d chunks", repository_id, len(all_chunks))
-        return len(all_chunks)
-
-    def save_file_manifest(self, repository_id: str, manifest: dict[str, str]) -> None:
-        path = self._index_path(repository_id) / "file_manifest.json"
-        with open(path, "w") as f:
-            json.dump(manifest, f)
-
-    def load_file_manifest(self, repository_id: str) -> dict[str, str]:
-        path = self._index_path(repository_id) / "file_manifest.json"
-        if not path.exists():
-            return {}
-        with open(path) as f:
-            return json.load(f)
-
-    def search(self, repository_id: str, query: str, top_k: int | None = None) -> list[dict]:
+    async def search(self, repository_id: str, query: str, top_k: int | None = None) -> list[dict]:
         top_k = top_k or settings.retrieval_top_k
-        index_dir = self._index_path(repository_id)
 
-        index_file = index_dir / "index.faiss"
-        chunks_file = index_dir / "chunks.pkl.gz"
-        legacy_chunks = index_dir / "chunks.pkl"
+        from app.db.session import async_session_factory
 
-        if not index_file.exists():
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(RepositoryChunk).where(RepositoryChunk.repository_id == repository_id)
+            )
+            chunks = result.scalars().all()
+
+        if not chunks:
             return []
 
-        if chunks_file.exists():
-            chunks = self._load_chunks_compressed(chunks_file)
-        elif legacy_chunks.exists():
-            with open(legacy_chunks, "rb") as f:
-                chunks = pickle.load(f)
-        else:
-            return []
+        model = get_model()
+        query_embedding = model.encode([query], convert_to_numpy=True)[0].astype(np.float32)
 
-        index = faiss.read_index(str(index_file))
-        query_vec = self._embed_texts([query])
-        faiss.normalize_L2(query_vec)
-        scores, indices = index.search(query_vec, min(top_k, len(chunks)))
+        ranked = []
+        for chunk in chunks:
+            if chunk.embedding:
+                chunk_emb = np.frombuffer(chunk.embedding, dtype=np.float32)
+                score = np.dot(query_embedding, chunk_emb) / (np.linalg.norm(query_embedding) * np.linalg.norm(chunk_emb) + 1e-9)
+            else:
+                score = -1.0
+            ranked.append((score, chunk))
+
+        ranked.sort(key=lambda item: -item[0])
 
         results = []
-        for score, idx in zip(scores[0], indices[0]):
-            if idx < 0:
-                continue
-            chunk = chunks[idx]
+        for score, chunk in ranked[:top_k]:
             results.append(
                 {
                     "score": float(score),
-                    "entity_id": chunk.entity_id,
-                    "name": chunk.name,
+                    "entity_id": chunk.id,
+                    "name": chunk.entity_name,
                     "type": chunk.entity_type,
                     "file_path": chunk.file_path,
                     "content": chunk.content[:1500],
@@ -185,7 +131,6 @@ class EmbeddingService:
                     "line_end": chunk.line_end,
                 }
             )
-        increment("searches_performed")
         return results
 
 
