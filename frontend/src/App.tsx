@@ -246,16 +246,60 @@ export default function App() {
           {tab === "analyze" && (
             <>
               <div className="hero">
-                <h1>AI-Powered Codebase Explainer</h1>
-                <p>Instantly search, map, and understand any public Python repository using semantic vector embeddings and Gemini RAG.</p>
-                <div className="workflow-seq">
-                  <span className="wf-step">1. Repository</span>
-                  <span className="wf-arrow">→</span>
-                  <span className="wf-step">2. Analysis</span>
-                  <span className="wf-arrow">→</span>
-                  <span className="wf-step">3. Insights</span>
-                  <span className="wf-arrow">→</span>
-                  <span className="wf-step">4. Output</span>
+                <div className="hero-content">
+                  <div className="hero-illustration fade-up-1">
+                    <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="50" cy="50" r="40" stroke="url(#paint0_linear)" strokeWidth="2" strokeDasharray="4 4" className="spin-slow" />
+                      <circle cx="50" cy="50" r="28" fill="url(#paint1_linear)" fillOpacity="0.1" stroke="url(#paint2_linear)" strokeWidth="1.5" />
+                      <path d="M42 42L58 58M58 42L42 58" stroke="url(#paint3_linear)" strokeWidth="2" strokeLinecap="round" className="pulse-fast" />
+                      <circle cx="50" cy="50" r="8" fill="url(#paint4_linear)" />
+                      <defs>
+                        <linearGradient id="paint0_linear" x1="10" y1="50" x2="90" y2="50" gradientUnits="userSpaceOnUse">
+                          <stop stopColor="#4F46E5" />
+                          <stop offset="1" stopColor="#10B981" stopOpacity="0" />
+                        </linearGradient>
+                        <linearGradient id="paint1_linear" x1="22" y1="22" x2="78" y2="78" gradientUnits="userSpaceOnUse">
+                          <stop stopColor="#4338CA" />
+                          <stop offset="1" stopColor="#10B981" />
+                        </linearGradient>
+                        <linearGradient id="paint2_linear" x1="22" y1="22" x2="78" y2="78" gradientUnits="userSpaceOnUse">
+                          <stop stopColor="#4F46E5" />
+                          <stop offset="1" stopColor="#34D399" />
+                        </linearGradient>
+                        <linearGradient id="paint3_linear" x1="42" y1="42" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+                          <stop stopColor="#818CF8" />
+                          <stop offset="1" stopColor="#A7F3D0" />
+                        </linearGradient>
+                        <linearGradient id="paint4_linear" x1="42" y1="42" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+                          <stop stopColor="#4F46E5" />
+                          <stop offset="1" stopColor="#10B981" />
+                        </linearGradient>
+                      </defs>
+                    </svg>
+                  </div>
+                  <h1 className="fade-up-2">AI-Powered Codebase Explainer</h1>
+                  <p className="fade-up-3">Instantly search, map, and understand any public Python repository using semantic vector embeddings and Gemini RAG.</p>
+                  <div className="workflow-seq fade-up-4">
+                    <span className="wf-step">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+                      Repository
+                    </span>
+                    <span className="wf-arrow">→</span>
+                    <span className="wf-step">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      Analysis
+                    </span>
+                    <span className="wf-arrow">→</span>
+                    <span className="wf-step">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                      Insights
+                    </span>
+                    <span className="wf-arrow">→</span>
+                    <span className="wf-step">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                      Output
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -274,7 +318,17 @@ export default function App() {
                     placeholder="https://github.com/owner/repo"
                   />
                   <button className="btn btn-primary" onClick={handleIngest} disabled={loading || !isOnline}>
-                    {loading ? "Analyzing…" : "Start analysis"}
+                    {loading ? (
+                      <>
+                        <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                        Analyzing…
+                      </>
+                    ) : (
+                      <>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Start analysis
+                      </>
+                    )}
                   </button>
                 </div>
 
@@ -410,7 +464,17 @@ export default function App() {
                             onClick={() => handleAsk()}
                             disabled={loading || !question.trim()}
                           >
-                            {loading ? "Asking Gemini…" : "Ask"}
+                            {loading ? (
+                              <>
+                                <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                                Asking Gemini…
+                              </>
+                            ) : (
+                              <>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                Ask
+                              </>
+                            )}
                           </button>
                         </div>
 
@@ -464,6 +528,7 @@ export default function App() {
                             catch (e) { setError(e instanceof Error ? e.message : String(e)); }
                             finally { setLoading(false); }
                           }} disabled={loading}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
                             README
                           </button>
                           <button className="btn btn-secondary" onClick={async () => {
@@ -473,6 +538,7 @@ export default function App() {
                             catch (e) { setError(e instanceof Error ? e.message : String(e)); }
                             finally { setLoading(false); }
                           }} disabled={loading}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                             Diagram
                           </button>
                         </div>
