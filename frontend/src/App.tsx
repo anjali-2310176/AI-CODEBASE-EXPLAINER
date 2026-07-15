@@ -1,32 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   askQuestion,
+  checkHealth,
   generateDiagram,
   generateReadme,
   getJob,
   ingestRepo,
   listRepos,
   ChatSource,
+  HealthInfo,
   Job,
   Repository,
 } from "./api";
 
 const SAMPLE_QUESTIONS = [
-  "What is the main entry point of this project?",
+  "What is the main entry point?",
   "How is routing handled?",
-  "What are the core classes and their responsibilities?",
-  "Explain the project architecture in simple terms.",
+  "What are the core classes?",
+  "Explain the architecture.",
 ];
 
 const PIPELINE_STEPS = [
-  { key: "cloning", label: "Clone repo" },
-  { key: "parsing", label: "Parse AST" },
-  { key: "graphing", label: "Build graph" },
-  { key: "indexing", label: "Embed + index" },
+  { key: "cloning", label: "Clone" },
+  { key: "parsing", label: "Parse" },
+  { key: "graphing", label: "Map" },
+  { key: "indexing", label: "Store" },
   { key: "completed", label: "Ready" },
 ];
 
+const TECH = ["FastAPI", "React", "SQLite", "Tree-sitter", "Sentence-Transformers", "Gemini"];
+
 type Tab = "analyze" | "chat" | "about";
+
+const NAV: { id: Tab; label: string; icon: string }[] = [
+  { id: "analyze", label: "Analyze Repo", icon: "◈" },
+  { id: "chat", label: "Code Search", icon: "◉" },
+  { id: "about", label: "How It Works", icon: "◎" },
+];
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("analyze");
@@ -41,6 +51,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [job, setJob] = useState<Job | null>(null);
   const [error, setError] = useState("");
+  const [health, setHealth] = useState<HealthInfo | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -57,6 +68,9 @@ export default function App() {
 
   useEffect(() => {
     refresh();
+    checkHealth().then(setHealth);
+    const interval = setInterval(() => checkHealth().then(setHealth), 15000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -83,315 +97,393 @@ export default function App() {
     setError("");
     setJob(null);
     try {
-      const newJob = await ingestRepo(url);
-      setJob(newJob);
+      setJob(await ingestRepo(url));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setLoading(false);
     }
   }
 
-  async function handleAsk(q?: string) {
-    const text = q ?? question;
-    if (!selected || !text.trim()) return;
+  async function handleAsk(qOverride?: string) {
+    if (!selected) return;
+    const q = qOverride || question;
+    if (!q.trim()) return;
+    setQuestion(q);
     setLoading(true);
-    setError("");
     setAnswer("");
     setSources([]);
+    setError("");
     try {
-      const res = await askQuestion(selected.id, text);
+      const res = await askQuestion(selected.id, q);
       setAnswer(res.answer);
       setSources(res.sources);
-      setQuestion(text);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleReadme() {
-    if (!selected) return;
-    setLoading(true);
-    try {
-      setReadme(await generateReadme(selected.id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleDiagram() {
-    if (!selected) return;
-    setLoading(true);
-    try {
-      setDiagram(await generateDiagram(selected.id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+    } catch (err: any) {
+      setAnswer(`**Error generating answer:**\n${err.message || String(err)}\n\nPlease wait a moment and try again if this is a rate limit.`);
     } finally {
       setLoading(false);
     }
   }
 
   const readyRepos = repos.filter((r) => r.status === "completed");
+  const isOnline = health?.status === "ok";
+  const isOfflineMode = health?.llm?.llm_provider === "offline";
 
   return (
-    <div className="app">
-      <header className="hero">
-        <div className="hero-text">
-          <span className="eyebrow">Portfolio Project · RAG + Full-Stack</span>
-          <h1>AI Codebase Explainer</h1>
-          <p>
-            Paste any public Python GitHub repo. The system clones it, parses the code,
-            builds a knowledge graph, indexes embeddings in FAISS, and answers your
-            questions using retrieval-augmented generation.
-          </p>
-        </div>
-        <div className="tech-pills">
-          {["FastAPI", "React", "LangGraph", "FAISS", "Neo4j", "Tree-sitter"].map((t) => (
-            <span key={t} className="pill">{t}</span>
-          ))}
+    <div className="shell">
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand">
+            <div className="brand-mark">AI</div>
+            <div>
+              <div className="brand-title">Codebase Explainer</div>
+              <div className="brand-sub">AI/ML Portfolio Project</div>
+            </div>
+          </div>
+          <div className={`status-pill ${isOnline ? "online" : "offline"}`}>
+            <span className="status-dot" />
+            {isOnline ? "API connected" : "API offline — run ./scripts/run-local.sh"}
+          </div>
         </div>
       </header>
 
-      <nav className="tabs">
-        {(["analyze", "chat", "about"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            className={tab === t ? "active" : ""}
-            onClick={() => setTab(t)}
-          >
-            {t === "analyze" ? "1. Analyze" : t === "chat" ? "2. RAG Chat" : "How it works"}
-          </button>
-        ))}
-      </nav>
-
-      {error && <div className="error">{error}</div>}
-
-      {tab === "analyze" && (
-        <>
-          <section className="card">
-            <h2>Analyze a GitHub Repository</h2>
-            <p className="hint">Try a small repo first, e.g. <code>tiangolo/fastapi</code></p>
-            <div className="row">
-              <input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://github.com/owner/repo"
-              />
-              <button onClick={handleIngest} disabled={loading}>
-                {loading ? "Analyzing…" : "Start analysis"}
+      <div className="layout">
+        <aside className="sidebar">
+          <div className="nav-label">Navigation</div>
+          <nav className="nav">
+            {NAV.map((n) => (
+              <button
+                key={n.id}
+                className={`nav-btn ${tab === n.id ? "active" : ""}`}
+                onClick={() => setTab(n.id)}
+              >
+                <span className="nav-icon">{n.icon}</span>
+                {n.label}
               </button>
+            ))}
+          </nav>
+
+          <div className="sidebar-card">
+            <strong>Stack</strong>
+            {TECH.map((t) => (
+              <span key={t} className="tech-tag" style={{ marginRight: 4, marginBottom: 4, display: "inline-block" }}>
+                {t}
+              </span>
+            ))}
+          </div>
+
+        </aside>
+
+        <main className="main">
+          {error && (
+            <div className="alert alert-error">
+              <span>⚠</span>
+              <span>{error}</span>
             </div>
+          )}
 
-            {job && (
-              <div className="progress-section">
-                <div className="progress-bar">
-                  <div className="progress-fill" style={{ width: `${job.progress}%` }} />
-                </div>
-                <div className="pipeline-steps">
-                  {PIPELINE_STEPS.map((step) => (
-                    <span
-                      key={step.key}
-                      className={`step ${
-                        job.status === step.key || (job.progress >= 100 && step.key === "completed")
-                          ? "active"
-                          : ""
-                      } ${job.stage === step.key ? "current" : ""}`}
-                    >
-                      {step.label}
-                    </span>
-                  ))}
-                </div>
-                <small>Status: {job.status} · {job.progress}% · stage: {job.stage}</small>
-              </div>
-            )}
-          </section>
+          {!isOnline && (
+            <div className="alert alert-warn">
+              <span>◎</span>
+              <span>
+                Backend not running. Open a terminal and run:{" "}
+                <code>./scripts/run-local.sh</code> then visit{" "}
+                <code>http://localhost:5173</code>
+              </span>
+            </div>
+          )}
 
-          <section className="card">
-            <h2>Analyzed Repositories</h2>
-            {repos.length === 0 ? (
-              <p className="empty">No repositories yet. Analyze one above to get started.</p>
-            ) : (
-              <ul className="repo-list">
-                {repos.map((r) => (
-                  <li
-                    key={r.id}
-                    className={selected?.id === r.id ? "selected" : ""}
-                    onClick={() => setSelected(r)}
-                  >
-                    <div className="repo-row">
-                      <strong>{r.name}</strong>
-                      <span className={`badge ${r.status}`}>{r.status}</span>
-                    </div>
-                    <small>{r.file_count} files · {r.entity_count} code entities</small>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
-
-      {tab === "chat" && (
-        <>
-          {readyRepos.length === 0 ? (
-            <section className="card empty-state">
-              <h2>No repo ready yet</h2>
-              <p>Go to <button className="link" onClick={() => setTab("analyze")}>Analyze</button> and wait for status = completed.</p>
-            </section>
-          ) : (
+          {tab === "analyze" && (
             <>
+              <div className="page-header">
+                <h1>Analyze a Repository</h1>
+                <p>
+                  Paste a public Python GitHub URL to clone, parse with Tree-sitter, embed chunks with
+                  sentence-transformers, and answer questions via Gemini RAG.
+                </p>
+              </div>
+
               <section className="card">
-                <h2>Select repository</h2>
-                <div className="repo-chips">
-                  {readyRepos.map((r) => (
-                    <button
-                      key={r.id}
-                      className={`chip ${selected?.id === r.id ? "selected" : ""}`}
-                      onClick={() => { setSelected(r); setAnswer(""); setSources([]); }}
-                    >
-                      {r.name}
-                    </button>
-                  ))}
+                <div className="card-header">
+                  <h2>New analysis</h2>
                 </div>
+                <p className="hint">
+                  Start with a small repo — e.g. <code>encode/httpx</code>
+                </p>
+                <div className="input-row">
+                  <input
+                    className="input"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://github.com/owner/repo"
+                  />
+                  <button className="btn btn-primary" onClick={handleIngest} disabled={loading || !isOnline}>
+                    {loading ? "Analyzing…" : "Start analysis"}
+                  </button>
+                </div>
+
+                {job && (
+                  <div className="progress-wrap">
+                    <div className="progress-track">
+                      <div className="progress-bar" style={{ width: `${job.progress}%` }} />
+                    </div>
+                    <div className="pipeline">
+                      {PIPELINE_STEPS.map((step) => (
+                        <span
+                          key={step.key}
+                          className={`step-tag ${
+                            job.status === step.key || (job.progress >= 100 && step.key === "completed")
+                              ? "done"
+                              : ""
+                          } ${job.stage === step.key || job.status === step.key ? "current" : ""}`}
+                        >
+                          {step.label}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="progress-meta">
+                      {job.status} · {job.progress}% · {job.stage}
+                    </div>
+                  </div>
+                )}
               </section>
 
-              {selected && (
-                <>
-                  <section className="card rag-card">
-                    <h2>RAG Chat — {selected.name}</h2>
-                    <p className="hint">
-                      Your question is embedded → top-k similar code chunks retrieved from FAISS → LLM answers using only that context.
-                    </p>
+              <section className="card">
+                <div className="card-header">
+                  <h2>Repositories</h2>
+                  <span className="badge completed">{repos.length} total</span>
+                </div>
+                {repos.length === 0 ? (
+                  <div className="empty-state">
+                    <div className="empty-icon">📂</div>
+                    <h2>No repositories yet</h2>
+                    <p>Analyze a GitHub repo above to get started.</p>
+                  </div>
+                ) : (
+                  <div className="repo-grid">
+                    {repos.map((r) => (
+                      <div
+                        key={r.id}
+                        className={`repo-item ${selected?.id === r.id ? "selected" : ""}`}
+                        onClick={() => setSelected(r)}
+                      >
+                        <div>
+                          <div className="repo-name">{r.name}</div>
+                          <div className="repo-meta">
+                            {r.file_count} files · {r.entity_count} entities
+                          </div>
+                        </div>
+                        <span className={`badge ${r.status}`}>{r.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </>
+          )}
 
-                    <div className="sample-questions">
-                      {SAMPLE_QUESTIONS.map((q) => (
-                        <button key={q} className="chip" onClick={() => handleAsk(q)} disabled={loading}>
-                          {q}
+          {tab === "chat" && (
+            <>
+              <div className="page-header">
+                <h1>Code Search</h1>
+                <p>
+                  Ask questions about the indexed code. Semantic vector search retrieves relevant
+                  chunks; Gemini generates a grounded answer.
+                </p>
+              </div>
+
+              {readyRepos.length === 0 ? (
+                <section className="card empty-state">
+                  <div className="empty-icon">💬</div>
+                  <h2>No repo ready</h2>
+                  <p>
+                    Analyze a repository first, then return here when status is{" "}
+                    <code>completed</code>.
+                  </p>
+                  <button className="btn btn-primary" style={{ marginTop: "1rem" }} onClick={() => setTab("analyze")}>
+                    Go to Analyze
+                  </button>
+                </section>
+              ) : (
+                <>
+                  <section className="card">
+                    <h2>Select repository</h2>
+                    <div className="chip-row">
+                      {readyRepos.map((r) => (
+                        <button
+                          key={r.id}
+                          className={`chip ${selected?.id === r.id ? "selected" : ""}`}
+                          onClick={() => {
+                            setSelected(r);
+                            setAnswer("");
+                            setSources([]);
+                          }}
+                        >
+                          {r.name}
                         </button>
                       ))}
                     </div>
+                  </section>
 
-                    <div className="row">
-                      <input
-                        value={question}
-                        onChange={(e) => setQuestion(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && handleAsk()}
-                        placeholder="Ask anything about this codebase…"
-                      />
-                      <button onClick={() => handleAsk()} disabled={loading || !question.trim()}>
-                        {loading ? "Retrieving…" : "Ask"}
-                      </button>
-                    </div>
+                  {selected && (
+                    <>
+                      <section className="card search-panel">
+                        <h2>{selected.name}</h2>
+                        <p className="hint">
+                          Search question → retrieve chunks → answer from code context
+                        </p>
 
-                    {answer && (
-                      <div className="answer-block">
-                        <h3>Answer</h3>
-                        <pre>{answer}</pre>
-                      </div>
-                    )}
+                        <div className="chip-row">
+                          {SAMPLE_QUESTIONS.map((q) => (
+                            <button key={q} className="chip" onClick={() => handleAsk(q)} disabled={loading}>
+                              {q}
+                            </button>
+                          ))}
+                        </div>
 
-                    {sources.length > 0 && (
-                      <div className="sources-block">
-                        <h3>Retrieved context (RAG sources)</h3>
-                        <p className="hint">These code chunks were retrieved by vector similarity — this is the &quot;R&quot; in RAG.</p>
-                        {sources.map((s, i) => (
-                          <div key={i} className="source-card">
-                            <div className="source-header">
-                              <span className="source-name">{s.name}</span>
-                              <span className="source-type">{s.type}</span>
-                              <span className="source-score">score: {s.score.toFixed(3)}</span>
-                            </div>
-                            <div className="source-path">{s.file_path}</div>
-                            <pre className="source-snippet">{s.content?.slice(0, 400)}…</pre>
+                        <div className="input-row">
+                          <input
+                            className="input"
+                            value={question}
+                            onChange={(e) => setQuestion(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && handleAsk()}
+                            placeholder="Ask anything about this codebase…"
+                          />
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => handleAsk()}
+                            disabled={loading || !question.trim()}
+                          >
+                            {loading ? "Asking Gemini…" : "Ask"}
+                          </button>
+                        </div>
+
+                        {loading && !answer && (
+                          <div className="answer-box">
+                            <h3>Answer</h3>
+                            <div className="skeleton-box" style={{ height: "120px", marginTop: "0.5rem" }} />
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </section>
+                        )}
 
-                  <section className="card row actions">
-                    <button onClick={handleReadme} disabled={loading}>Generate README</button>
-                    <button onClick={handleDiagram} disabled={loading}>Generate diagram</button>
-                  </section>
+                        {!loading && answer && (
+                          <div className="answer-box">
+                            <h3>Answer</h3>
+                            <div className="code-block" style={{ marginTop: "0.5rem" }}>
+                              {/* Using simple markdown-style rendering for demo purposes */}
+                              {answer.split('\n').map((line, i) => {
+                                if (line.startsWith('**')) return <strong key={i}>{line.replace(/\*\*/g, '')}<br/></strong>;
+                                if (line.startsWith('```')) return <br key={i}/>;
+                                return <span key={i}>{line}<br/></span>;
+                              })}
+                            </div>
+                          </div>
+                        )}
 
-                  {readme && (
-                    <section className="card">
-                      <h2>Generated README</h2>
-                      <pre>{readme}</pre>
-                    </section>
-                  )}
+                        {sources.length > 0 && (
+                          <div className="sources">
+                            <h3>Retrieved sources</h3>
+                            <p className="hint">Code chunks matched by SQLite-backed retrieval.</p>
+                            {sources.map((s, i) => (
+                              <div key={i} className="source-item">
+                                <div className="source-top">
+                                  <span className="source-name">{s.name}</span>
+                                  <span className="source-type">{s.type}</span>
+                                  <span className="source-score">{s.score.toFixed(3)}</span>
+                                </div>
+                                <div className="source-path">{s.file_path}</div>
+                                <div className="source-code">{s.content?.slice(0, 350)}…</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
 
-                  {diagram && (
-                    <section className="card">
-                      <h2>Architecture diagram (Mermaid)</h2>
-                      <pre>{diagram}</pre>
-                    </section>
+                      <section className="card">
+                        <h2>Quick docs</h2>
+                        <div className="action-row">
+                          <button className="btn btn-secondary" onClick={async () => {
+                            if (!selected) return;
+                            setLoading(true);
+                            try { setReadme(await generateReadme(selected.id)); }
+                            catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+                            finally { setLoading(false); }
+                          }} disabled={loading}>
+                            README
+                          </button>
+                          <button className="btn btn-secondary" onClick={async () => {
+                            if (!selected) return;
+                            setLoading(true);
+                            try { setDiagram(await generateDiagram(selected.id)); }
+                            catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+                            finally { setLoading(false); }
+                          }} disabled={loading}>
+                            Diagram
+                          </button>
+                        </div>
+                      </section>
+
+                      {readme && (
+                        <section className="card">
+                          <h2>Repository summary</h2>
+                          <pre className="code-block">{readme}</pre>
+                        </section>
+                      )}
+
+                      {diagram && (
+                        <section className="card">
+                          <h2>Structure diagram</h2>
+                          <pre className="code-block">{diagram}</pre>
+                        </section>
+                      )}
+                    </>
                   )}
                 </>
               )}
             </>
           )}
-        </>
-      )}
 
-      {tab === "about" && (
-        <section className="card about">
-          <h2>How this project works (RAG pipeline)</h2>
-          <div className="flow">
-            <div className="flow-step">
-              <span className="flow-num">1</span>
-              <div>
-                <strong>Clone &amp; parse</strong>
-                <p>Shallow-clone the GitHub repo. Tree-sitter parses Python files into classes, functions, and imports.</p>
+          {tab === "about" && (
+            <>
+              <div className="page-header">
+                <h1>How it works</h1>
+                <p>A code exploration tool demonstrating a full RAG pipeline: AST parsing → vector embeddings → semantic retrieval → Gemini-generated answers.</p>
               </div>
-            </div>
-            <div className="flow-arrow">↓</div>
-            <div className="flow-step">
-              <span className="flow-num">2</span>
-              <div>
-                <strong>Knowledge graph</strong>
-                <p>Entities and relationships (imports, contains, defines) stored in Neo4j for structural queries.</p>
-              </div>
-            </div>
-            <div className="flow-arrow">↓</div>
-            <div className="flow-step">
-              <span className="flow-num">3</span>
-              <div>
-                <strong>Embed &amp; index</strong>
-                <p>Code chunks embedded with OpenAI <code>text-embedding-3-small</code>, stored in a FAISS vector index on disk.</p>
-              </div>
-            </div>
-            <div className="flow-arrow">↓</div>
-            <div className="flow-step highlight">
-              <span className="flow-num">4</span>
-              <div>
-                <strong>RAG Q&amp;A (LangGraph)</strong>
-                <p>
-                  <b>Retrieve:</b> embed the user question → search FAISS for top-k similar chunks.<br />
-                  <b>Augment:</b> inject retrieved code into the prompt as context.<br />
-                  <b>Generate:</b> GPT answers using only that context — never the full repo.
-                </p>
-              </div>
-            </div>
-          </div>
 
-          <h3>Skills demonstrated</h3>
-          <ul className="skills">
-            <li>End-to-end system design (frontend → API → workers → databases)</li>
-            <li>RAG: chunking, embedding, vector search, context injection</li>
-            <li>LLM orchestration with LangGraph</li>
-            <li>AST parsing with Tree-sitter</li>
-            <li>Graph data modeling (Neo4j)</li>
-            <li>Async Python (FastAPI), React UI, Docker Compose</li>
-          </ul>
-        </section>
-      )}
+              <section className="card">
+                <h2>Demo pipeline</h2>
+                <div className="flow-list">
+                  {[
+                    { n: "1", title: "Clone & parse", desc: "Shallow-clone the repo. Tree-sitter extracts classes, functions, and imports from Python files.", featured: false },
+                    { n: "2", title: "Map structure", desc: "Entities and relationships are kept in memory for quick exploration and module summaries.", featured: false },
+                    { n: "3", title: "Store chunks", desc: "Parsed code chunks are stored in SQLite so retrieval stays simple and portable.", featured: false },
+                    { n: "4", title: "Answer questions", desc: "Search: match chunks by keywords. Respond: summarize directly from retrieved code, with optional AI later.", featured: true },
+                  ].map((step) => (
+                    <div key={step.n} className={`flow-item ${step.featured ? "featured" : ""}`}>
+                      <span className="flow-num">{step.n}</span>
+                      <div>
+                        <strong>{step.title}</strong>
+                        <p>{step.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-      <footer>
-        <p>Built as a portfolio project · AI Codebase Explainer</p>
+                <h3>Skills demonstrated</h3>
+                <ul className="skills-list">
+                  <li>End-to-end RAG pipeline — retrieval-augmented generation with Gemini</li>
+                  <li>Semantic vector search with sentence-transformers (all-MiniLM-L6-v2)</li>
+                  <li>AST parsing with Tree-sitter — modules, classes, functions, imports</li>
+                  <li>FastAPI async backend with SQLite chunk store</li>
+                  <li>In-memory code graph for structure exploration</li>
+                  <li>Offline-first design with graceful LLM fallback</li>
+                </ul>
+              </section>
+            </>
+          )}
+        </main>
+      </div>
+
+      <footer className="footer">
+        Built with FastAPI · React · Sentence-Transformers · Gemini · <span>AI Codebase Explainer</span>
       </footer>
     </div>
   );
