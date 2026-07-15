@@ -75,3 +75,32 @@ class RepositoryChunk(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     repository: Mapped["Repository"] = relationship(back_populates="chunks")
+
+
+class CodeNode(Base):
+    __tablename__ = "code_nodes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
+    name: Mapped[str] = mapped_column(String(256), index=True)
+    node_type: Mapped[str] = mapped_column(String(64), index=True)  # module, class, function
+    file_path: Mapped[str] = mapped_column(String(1024))
+    start_line: Mapped[int | None] = mapped_column(nullable=True)
+    end_line: Mapped[int | None] = mapped_column(nullable=True)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    repository: Mapped["Repository"] = relationship()
+
+
+class CodeEdge(Base):
+    __tablename__ = "code_edges"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    repository_id: Mapped[str] = mapped_column(ForeignKey("repositories.id"), index=True)
+    source_node_id: Mapped[str] = mapped_column(ForeignKey("code_nodes.id"), index=True)
+    target_node_id: Mapped[str] = mapped_column(ForeignKey("code_nodes.id"), index=True)
+    edge_type: Mapped[str] = mapped_column(String(64), index=True)  # contains, calls, imports, inherits
+
+    # Relationships
+    repository: Mapped["Repository"] = relationship()

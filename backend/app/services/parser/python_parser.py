@@ -13,8 +13,8 @@ from app.services.parser.base import CodeParser, parser_registry
 PY_LANGUAGE = Language(tspython.language())
 
 
-def _entity_id(repo_id: str, file_path: str, name: str, entity_type: str) -> str:
-    key = f"{repo_id}:{file_path}:{entity_type}:{name}"
+def _entity_id(repo_id: str, file_path: str, name: str, entity_type: str, parent_id: str = "") -> str:
+    key = f"{repo_id}:{file_path}:{entity_type}:{name}:{parent_id}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
@@ -52,7 +52,7 @@ class PythonParser(CodeParser):
         entities: list[CodeEntity] = []
         relations: list[CodeRelation] = []
 
-        module_id = _entity_id(repository_id, rel_path, rel_path, "Module")
+        module_id = _entity_id(repository_id, rel_path, rel_path, "Module", "")
         module_entity = CodeEntity(
             id=module_id,
             name=file_path.stem,
@@ -70,7 +70,7 @@ class PythonParser(CodeParser):
         def walk(node, parent_class_id: str | None = None):
             if node.type == "import_statement" or node.type == "import_from_statement":
                 import_text = _node_text(source, node)
-                import_id = _entity_id(repository_id, rel_path, import_text, "Import")
+                import_id = _entity_id(repository_id, rel_path, import_text, "Import", module_id)
                 entities.append(
                     CodeEntity(
                         id=import_id,
@@ -92,7 +92,7 @@ class PythonParser(CodeParser):
                 if not name_node:
                     return
                 class_name = _node_text(source, name_node)
-                class_id = _entity_id(repository_id, rel_path, class_name, "Class")
+                class_id = _entity_id(repository_id, rel_path, class_name, "Class", module_id)
                 class_ids[class_name] = class_id
                 body = node.child_by_field_name("body")
                 docstring = _get_docstring(source, body) if body else None
@@ -117,7 +117,7 @@ class PythonParser(CodeParser):
                     for child in superclasses.children:
                         if child.type == "identifier":
                             parent_name = _node_text(source, child)
-                            parent_id = _entity_id(repository_id, rel_path, parent_name, "Class")
+                            parent_id = _entity_id(repository_id, rel_path, parent_name, "Class", module_id)
                             relations.append(
                                 CodeRelation(
                                     source_id=class_id, target_id=parent_id, relation_type=RelationType.INHERITS
@@ -133,7 +133,8 @@ class PythonParser(CodeParser):
                 func_name = _node_text(source, name_node)
                 is_method = parent_class_id is not None
                 etype = EntityType.METHOD if is_method else EntityType.FUNCTION
-                func_id = _entity_id(repository_id, rel_path, func_name, etype.value)
+                parent_id = parent_class_id or module_id
+                func_id = _entity_id(repository_id, rel_path, func_name, etype.value, parent_id)
                 body = node.child_by_field_name("body")
                 docstring = _get_docstring(source, body) if body else None
                 params = node.child_by_field_name("parameters")
@@ -152,7 +153,6 @@ class PythonParser(CodeParser):
                         content=redact_secrets(_node_text(source, node)[:4000]),
                     )
                 )
-                parent_id = parent_class_id or module_id
                 relations.append(
                     CodeRelation(source_id=parent_id, target_id=func_id, relation_type=RelationType.DEFINES)
                 )

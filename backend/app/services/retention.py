@@ -26,7 +26,7 @@ async def cleanup_expired_repositories(session: AsyncSession) -> int:
     graph = get_graph_service()
     for repo in repos:
         try:
-            graph.clear_repository(repo.id)
+            await graph.clear_repository(session, repo.id)
             _remove_repo_data(repo.id, repo.local_path)
             await session.execute(delete(AnalysisJob).where(AnalysisJob.repository_id == repo.id))
             await session.delete(repo)

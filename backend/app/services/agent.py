@@ -1,6 +1,7 @@
 import time
 from typing import TypedDict
 
+from app.db.session import async_session_factory
 from app.observability.metrics import increment, observe
 from app.security.sanitization import sanitize_llm_output, sanitize_user_question
 from app.services.embeddings import get_embedding_service
@@ -39,9 +40,10 @@ async def ask_question(repository_id: str, question: str) -> dict:
     # Fallback: if no chunks found, use graph entity list
     if not context_parts:
         graph = get_graph_service()
-        entities = graph.list_entities(repository_id, limit=15)
-        for e in entities:
-            context_parts.append(f"- {e['type']}: `{e['name']}` in `{e['file_path']}`")
+        async with async_session_factory() as session:
+            entities = await graph.list_entities(session, repository_id, limit=15)
+            for e in entities:
+                context_parts.append(f"- {e['type']}: `{e['name']}` in `{e['file_path']}`")
 
     context = "\n\n".join(context_parts)
     answer = await generate_answer(context, cleaned_question)
@@ -51,10 +53,12 @@ async def ask_question(repository_id: str, question: str) -> dict:
     return {"answer": sanitize_llm_output(answer), "sources": sources}
 
 
-def generate_readme(repository_id: str) -> str:
+async def generate_readme(repository_id: str) -> str:
     graph = get_graph_service()
-    modules = graph.get_module_stats(repository_id)
-    entities = graph.list_entities(repository_id, limit=50)
+    async with async_session_factory() as session:
+        modules = await graph.get_module_stats(session, repository_id)
+        entities = await graph.list_entities(session, repository_id, limit=50)
+        
     lines = ["# Repository Overview\n", "## Modules\n"]
     for m in modules[:20]:
         lines.append(f"- `{m['path']}`: {m['classes']} classes, {m['functions']} functions")
@@ -64,9 +68,11 @@ def generate_readme(repository_id: str) -> str:
     return "\n".join(lines)
 
 
-def generate_diagram(repository_id: str, diagram_type: str = "architecture") -> tuple[str, str]:
+async def generate_diagram(repository_id: str, diagram_type: str = "architecture") -> tuple[str, str]:
     graph = get_graph_service()
-    subgraph = graph.get_subgraph(repository_id, limit=50)
+    async with async_session_factory() as session:
+        subgraph = await graph.get_subgraph(session, repository_id, limit=50)
+        
     nodes = subgraph["nodes"][:15]
     lines = ["graph TD"]
     for n in nodes:
@@ -82,7 +88,8 @@ def generate_diagram(repository_id: str, diagram_type: str = "architecture") -> 
 
 async def summarize_modules(repository_id: str, module_path: str | None = None) -> tuple[str, list[dict]]:
     graph = get_graph_service()
-    modules = graph.get_module_stats(repository_id)
+    async with async_session_factory() as session:
+        modules = await graph.get_module_stats(session, repository_id)
 
     if module_path:
         modules = [m for m in modules if m["path"] == module_path]

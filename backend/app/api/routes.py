@@ -208,7 +208,7 @@ async def get_graph(
 
     offset = (page - 1) * page_size
     graph = get_graph_service()
-    data = graph.get_subgraph(repo_id, limit=page_size, offset=offset)
+    data = await graph.get_subgraph(session, repo_id, limit=page_size, offset=offset)
     return GraphResponse(
         nodes=data["nodes"], edges=data["edges"],
         page=page, page_size=page_size,
@@ -234,7 +234,7 @@ async def diagram(request: DiagramRequest, session: AsyncSession = Depends(get_s
     result = await session.execute(select(Repository).where(Repository.id == request.repository_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Repository not found")
-    mermaid, description = generate_diagram(request.repository_id, request.diagram_type)
+    mermaid, description = await generate_diagram(request.repository_id, request.diagram_type)
     return DiagramResponse(mermaid=mermaid, description=description)
 
 
@@ -243,7 +243,7 @@ async def readme(request: ReadmeRequest, session: AsyncSession = Depends(get_ses
     result = await session.execute(select(Repository).where(Repository.id == request.repository_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Repository not found")
-    content = generate_readme(request.repository_id)
+    content = await generate_readme(request.repository_id)
     return ReadmeResponse(content=content)
 
 

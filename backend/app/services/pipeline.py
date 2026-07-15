@@ -85,8 +85,9 @@ class IngestionPipeline:
             chunk_count = 0
 
             graph = get_graph_service()
-            graph.clear_repository(repo_id)
+            await graph.clear_repository(session, repo_id)
             await session.execute(delete(RepositoryChunk).where(RepositoryChunk.repository_id == repo_id))
+            await session.commit()
 
             for file_path in iter_python_files(local_path):
                 _check_cancelled(cancel_event)
@@ -124,13 +125,13 @@ class IngestionPipeline:
                 file_count += 1
                 entity_count += len(entities)
 
-                if len(entity_buffer) >= settings.graph_batch_size:
-                    graph.upsert_entities_batch(entity_buffer)
-                    graph.upsert_relations_batch(relation_buffer)
+                if len(entity_buffer) > 200:
+                    await graph.upsert_entities_batch(session, entity_buffer)
                     entity_buffer.clear()
+                if len(relation_buffer) > 500:
+                    await graph.upsert_relations_batch(session, repo_id, relation_buffer)
                     relation_buffer.clear()
-
-                if len(chunk_buffer) >= settings.graph_batch_size:
+                if len(chunk_buffer) > 100:
                     session.add_all(chunk_buffer)
                     await session.commit()
                     chunk_count += len(chunk_buffer)
@@ -141,8 +142,9 @@ class IngestionPipeline:
                     await session.commit()
 
             if entity_buffer:
-                graph.upsert_entities_batch(entity_buffer)
-                graph.upsert_relations_batch(relation_buffer)
+                await graph.upsert_entities_batch(session, entity_buffer)
+            if relation_buffer:
+                await graph.upsert_relations_batch(session, repo_id, relation_buffer)
             entity_buffer.clear()
             relation_buffer.clear()
 
