@@ -41,10 +41,9 @@ async def cleanup_expired_repositories(session: AsyncSession) -> int:
 
 
 def _remove_repo_data(repo_id: str, local_path: str | None) -> None:
-    for base in (settings.index_dir, settings.metadata_dir):
-        path = Path(base) / repo_id
-        if path.exists():
-            shutil.rmtree(path, ignore_errors=True)
+    path = Path(settings.metadata_dir) / repo_id
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
     if local_path:
         lp = Path(local_path)
         if lp.exists():

@@ -1,9 +1,6 @@
 import logging
 from typing import Any
 
-from neo4j import GraphDatabase
-
-from app.config import settings
 from app.services.entities import CodeEntity, CodeRelation
 
 logger = logging.getLogger(__name__)
@@ -11,129 +8,81 @@ logger = logging.getLogger(__name__)
 
 class GraphService:
     def __init__(self) -> None:
-        self._driver = GraphDatabase.driver(
-            settings.neo4j_uri,
-            auth=(settings.neo4j_user, settings.neo4j_password),
-        )
+        self._entities: dict[str, dict] = {}
+        self._relations: list[dict] = []
 
     def close(self) -> None:
-        self._driver.close()
+        pass
 
     def ensure_constraints(self) -> None:
-        with self._driver.session() as session:
-            session.run(
-                "CREATE CONSTRAINT entity_id IF NOT EXISTS FOR (e:Entity) REQUIRE e.id IS UNIQUE"
-            )
-            session.run(
-                "CREATE INDEX entity_repo_idx IF NOT EXISTS FOR (e:Entity) ON (e.repository_id)"
-            )
+        pass
 
     def clear_repository(self, repository_id: str) -> None:
-        with self._driver.session() as session:
-            session.run(
-                "MATCH (e:Entity {repository_id: $repo_id}) DETACH DELETE e",
-                repo_id=repository_id,
-            )
+        to_delete = {
+            eid for eid, e in self._entities.items() if e.get("repository_id") == repository_id
+        }
+        for eid in to_delete:
+            del self._entities[eid]
+        self._relations = [
+            r for r in self._relations
+            if r["source_id"] not in to_delete and r["target_id"] not in to_delete
+        ]
 
     def upsert_entities_batch(self, entities: list[CodeEntity]) -> None:
-        if not entities:
-            return
-        batch_size = settings.graph_batch_size
-        with self._driver.session() as session:
-            for i in range(0, len(entities), batch_size):
-                batch = entities[i : i + batch_size]
-                rows = [
-                    {
-                        "id": e.id,
-                        "name": e.name,
-                        "type": e.entity_type.value,
-                        "file_path": e.file_path,
-                        "repository_id": e.repository_id,
-                        "line_start": e.line_start,
-                        "line_end": e.line_end,
-                        "signature": e.signature,
-                        "docstring": e.docstring,
-                    }
-                    for e in batch
-                ]
-                session.run(
-                    """
-                    UNWIND $rows AS row
-                    MERGE (e:Entity {id: row.id})
-                    SET e.name = row.name,
-                        e.type = row.type,
-                        e.file_path = row.file_path,
-                        e.repository_id = row.repository_id,
-                        e.line_start = row.line_start,
-                        e.line_end = row.line_end,
-                        e.signature = row.signature,
-                        e.docstring = row.docstring
-                    """,
-                    rows=rows,
-                )
+        for entity in entities:
+            self._entities[entity.id] = {
+                "id": entity.id,
+                "name": entity.name,
+                "type": entity.entity_type.value,
+                "file_path": entity.file_path,
+                "repository_id": entity.repository_id,
+                "line_start": entity.line_start,
+                "line_end": entity.line_end,
+                "signature": entity.signature,
+                "docstring": entity.docstring,
+            }
 
     def upsert_relations_batch(self, relations: list[CodeRelation]) -> None:
-        if not relations:
-            return
-        batch_size = settings.graph_batch_size
-        with self._driver.session() as session:
-            for i in range(0, len(relations), batch_size):
-                batch = relations[i : i + batch_size]
-                by_type: dict[str, list[dict]] = {}
-                for rel in batch:
-                    by_type.setdefault(rel.relation_type.value, []).append(
-                        {"source_id": rel.source_id, "target_id": rel.target_id}
-                    )
-                for rel_type, rows in by_type.items():
-                    session.run(
-                        f"""
-                        UNWIND $rows AS row
-                        MATCH (a:Entity {{id: row.source_id}})
-                        MATCH (b:Entity {{id: row.target_id}})
-                        MERGE (a)-[r:{rel_type}]->(b)
-                        """,
-                        rows=rows,
-                    )
+        for rel in relations:
+            self._relations.append({
+                "source_id": rel.source_id,
+                "target_id": rel.target_id,
+                "type": rel.relation_type.value,
+            })
 
     def get_subgraph(
         self, repository_id: str, limit: int = 200, offset: int = 0
     ) -> dict[str, list[dict[str, Any]]]:
-        with self._driver.session() as session:
-            result = session.run(
-                """
-                MATCH (e:Entity {repository_id: $repo_id})
-                WITH e ORDER BY e.name
-                SKIP $offset LIMIT $limit
-                OPTIONAL MATCH (e)-[r]->(t:Entity {repository_id: $repo_id})
-                RETURN e, collect({rel: type(r), target: t}) AS rels
-                """,
-                repo_id=repository_id,
-                limit=limit,
-                offset=offset,
-            )
-            nodes: dict[str, dict] = {}
-            edges: list[dict] = []
-            for record in result:
-                e = record["e"]
-                nodes[e["id"]] = {
-                    "id": e["id"],
-                    "label": e["name"],
-                    "type": e["type"],
-                    "file_path": e.get("file_path"),
-                }
-                for rel_info in record["rels"]:
-                    if rel_info["target"]:
-                        t = rel_info["target"]
+        repo_entities = [e for e in self._entities.values() if e["repository_id"] == repository_id]
+        repo_entities.sort(key=lambda x: x["name"])
+        page = repo_entities[offset : offset + limit]
+
+        nodes: dict[str, dict] = {}
+        edges: list[dict] = []
+
+        for e in page:
+            nodes[e["id"]] = {
+                "id": e["id"],
+                "label": e["name"],
+                "type": e["type"],
+                "file_path": e.get("file_path"),
+            }
+            for rel in self._relations:
+                if rel["source_id"] == e["id"] and rel["target_id"] in self._entities:
+                    t = self._entities[rel["target_id"]]
+                    if t["repository_id"] == repository_id:
                         nodes[t["id"]] = {
                             "id": t["id"],
                             "label": t["name"],
                             "type": t["type"],
                             "file_path": t.get("file_path"),
                         }
-                        edges.append(
-                            {"source": e["id"], "target": t["id"], "type": rel_info["rel"]}
-                        )
-            return {"nodes": list(nodes.values()), "edges": edges}
+                        edges.append({
+                            "source": rel["source_id"],
+                            "target": rel["target_id"],
+                            "type": rel["type"],
+                        })
+        return {"nodes": list(nodes.values()), "edges": edges}
 
     def list_entities(
         self,
@@ -142,53 +91,37 @@ class GraphService:
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict]:
-        with self._driver.session() as session:
-            type_filter = "AND e.type = $type" if entity_type else ""
-            result = session.run(
-                f"""
-                MATCH (e:Entity {{repository_id: $repo_id}})
-                WHERE true {type_filter}
-                RETURN e.id AS id, e.name AS name, e.type AS type,
-                       e.file_path AS file_path, e.line_start AS line_start,
-                       e.line_end AS line_end
-                ORDER BY e.name
-                SKIP $offset LIMIT $limit
-                """,
-                repo_id=repository_id,
-                type=entity_type,
-                limit=limit,
-                offset=offset,
-            )
-            return [dict(r) for r in result]
+        items = [
+            e for e in self._entities.values()
+            if e["repository_id"] == repository_id
+            and (entity_type is None or e["type"] == entity_type)
+        ]
+        items.sort(key=lambda x: x["name"])
+        return items[offset : offset + limit]
 
     def get_module_stats(self, repository_id: str) -> list[dict]:
-        with self._driver.session() as session:
-            result = session.run(
-                """
-                MATCH (e:Entity {repository_id: $repo_id})
-                WHERE e.type IN ['Class', 'Function', 'Method']
-                RETURN e.file_path AS module, e.type AS type, count(*) AS count
-                ORDER BY module, type
-                """,
-                repo_id=repository_id,
-            )
-            module_map: dict[str, dict] = {}
-            for r in result:
-                mod = r["module"]
-                if mod not in module_map:
-                    module_map[mod] = {"path": mod, "classes": 0, "functions": 0, "methods": 0}
-                key = r["type"].lower() + "s"
-                if key in module_map[mod]:
-                    module_map[mod][key] = r["count"]
-            return list(module_map.values())
+        module_map: dict[str, dict] = {}
+        for e in self._entities.values():
+            if e["repository_id"] != repository_id:
+                continue
+            if e["type"] not in ("Class", "Function", "Method"):
+                continue
+            mod = e["file_path"]
+            if mod not in module_map:
+                module_map[mod] = {"path": mod, "classes": 0, "functions": 0, "methods": 0}
+            key = e["type"].lower() + "s"
+            if key in module_map[mod]:
+                module_map[mod][key] += 1
+        return list(module_map.values())
 
 
-_graph_service: GraphService | None = None
+_graph_service = None
 
 
-def get_graph_service() -> GraphService:
+def get_graph_service():
     global _graph_service
     if _graph_service is None:
         _graph_service = GraphService()
         _graph_service.ensure_constraints()
+        logger.info("Using in-memory graph (lite mode)")
     return _graph_service

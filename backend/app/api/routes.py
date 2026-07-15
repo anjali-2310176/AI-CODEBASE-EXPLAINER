@@ -225,7 +225,7 @@ async def chat(request: ChatRequest, session: AsyncSession = Depends(get_session
     if repo.status != JobStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Repository analysis not complete")
 
-    response = ask_question(request.repository_id, request.question)
+    response = await ask_question(request.repository_id, request.question)
     return ChatResponse(answer=response["answer"], sources=response["sources"])
 
 
@@ -252,5 +252,5 @@ async def summarize(request: ModuleSummaryRequest, session: AsyncSession = Depen
     result = await session.execute(select(Repository).where(Repository.id == request.repository_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Repository not found")
-    summary, modules = summarize_modules(request.repository_id, request.module_path)
+    summary, modules = await summarize_modules(request.repository_id, request.module_path)
     return ModuleSummaryResponse(summary=summary, modules=modules)

@@ -20,7 +20,7 @@ def get_gemini_client() -> genai.Client | None:
 
 def check_llm_setup() -> dict:
     return {
-        "llm_provider": "gemini-2.5-flash" if settings.gemini_api_key else "offline",
+        "llm_provider": "gemini-1.5-flash" if settings.gemini_api_key else "offline",
         "retrieval": "vector-cosine-similarity",
         "cost": "free (gemini-flash)",
         "lite_mode": settings.lite_mode,
@@ -50,7 +50,7 @@ async def generate_answer(context: str, question: str) -> str:
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash",
             contents=prompt,
         )
         return response.text

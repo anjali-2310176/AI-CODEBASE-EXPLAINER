@@ -28,8 +28,6 @@ const PIPELINE_STEPS = [
   { key: "completed", label: "Ready" },
 ];
 
-const TECH = ["FastAPI", "React", "SQLite", "Tree-sitter", "Sentence-Transformers", "Gemini"];
-
 type Tab = "analyze" | "chat" | "about";
 
 const NAV: { id: Tab; label: string; icon: string }[] = [
@@ -37,6 +35,64 @@ const NAV: { id: Tab; label: string; icon: string }[] = [
   { id: "chat", label: "Code Search", icon: "◉" },
   { id: "about", label: "How It Works", icon: "◎" },
 ];
+
+function ArchitectureAnimation() {
+  return (
+    <div className="arch-diagram">
+      <div className="arch-row">
+        <div className="arch-node">
+          <div className="node-icon">📦</div>
+          <div className="node-title">GitHub Repo</div>
+          <div className="node-desc">Source Code</div>
+        </div>
+        
+        <div className="arch-line">
+          <div className="arch-packet"></div>
+          <div className="arch-packet packet-delay-1"></div>
+        </div>
+
+        <div className="arch-node">
+          <div className="node-icon">🌳</div>
+          <div className="node-title">Tree-sitter</div>
+          <div className="node-desc">AST Parsing</div>
+          <div className="arch-v-line">
+            <div className="arch-v-packet"></div>
+          </div>
+        </div>
+
+        <div className="arch-line">
+          <div className="arch-packet packet-delay-1"></div>
+          <div className="arch-packet packet-delay-2"></div>
+        </div>
+
+        <div className="arch-node">
+          <div className="node-icon">🧠</div>
+          <div className="node-title">Embeddings</div>
+          <div className="node-desc">MiniLM-L6-v2</div>
+        </div>
+      </div>
+
+      <div className="arch-row" style={{ marginTop: "40px" }}>
+        <div className="arch-node">
+          <div className="node-icon">🗄️</div>
+          <div className="node-title">SQLite Vector Store</div>
+          <div className="node-desc">Persistent Chunks</div>
+        </div>
+
+        <div className="arch-line">
+          <div className="arch-packet" style={{ animationDirection: "reverse" }}></div>
+          <div className="arch-packet packet-delay-1" style={{ animationDirection: "reverse" }}></div>
+        </div>
+
+        <div className="arch-node">
+          <div className="node-icon">✨</div>
+          <div className="node-title">Gemini RAG</div>
+          <div className="node-desc">Contextual Answers</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("analyze");
@@ -133,10 +189,15 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <div className="brand-mark">AI</div>
+            <div className="brand-mark">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+            </div>
             <div>
-              <div className="brand-title">Codebase Explainer</div>
-              <div className="brand-sub">AI/ML Portfolio Project</div>
+              <div className="brand-title">Lens</div>
+              <div className="brand-sub">Semantic Code Search</div>
             </div>
           </div>
           <div className={`status-pill ${isOnline ? "online" : "offline"}`}>
@@ -161,16 +222,6 @@ export default function App() {
               </button>
             ))}
           </nav>
-
-          <div className="sidebar-card">
-            <strong>Stack</strong>
-            {TECH.map((t) => (
-              <span key={t} className="tech-tag" style={{ marginRight: 4, marginBottom: 4, display: "inline-block" }}>
-                {t}
-              </span>
-            ))}
-          </div>
-
         </aside>
 
         <main className="main">
@@ -194,12 +245,18 @@ export default function App() {
 
           {tab === "analyze" && (
             <>
-              <div className="page-header">
-                <h1>Analyze a Repository</h1>
-                <p>
-                  Paste a public Python GitHub URL to clone, parse with Tree-sitter, embed chunks with
-                  sentence-transformers, and answer questions via Gemini RAG.
-                </p>
+              <div className="hero">
+                <h1>AI-Powered Codebase Explainer</h1>
+                <p>Instantly search, map, and understand any public Python repository using semantic vector embeddings and Gemini RAG.</p>
+                <div className="workflow-seq">
+                  <span className="wf-step">1. Repository</span>
+                  <span className="wf-arrow">→</span>
+                  <span className="wf-step">2. Analysis</span>
+                  <span className="wf-arrow">→</span>
+                  <span className="wf-step">3. Insights</span>
+                  <span className="wf-arrow">→</span>
+                  <span className="wf-step">4. Output</span>
+                </div>
               </div>
 
               <section className="card">
@@ -467,7 +524,8 @@ export default function App() {
                   ))}
                 </div>
 
-                <h3>Skills demonstrated</h3>
+                <h3>System Architecture</h3>
+                <ArchitectureAnimation />
                 <ul className="skills-list">
                   <li>End-to-end RAG pipeline — retrieval-augmented generation with Gemini</li>
                   <li>Semantic vector search with sentence-transformers (all-MiniLM-L6-v2)</li>
@@ -483,7 +541,7 @@ export default function App() {
       </div>
 
       <footer className="footer">
-        Built with FastAPI · React · Sentence-Transformers · Gemini · <span>AI Codebase Explainer</span>
+        Built with FastAPI · React · Sentence-Transformers · Gemini · <span>Lens</span>
       </footer>
     </div>
   );

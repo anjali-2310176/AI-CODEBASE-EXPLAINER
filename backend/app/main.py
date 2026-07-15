@@ -10,6 +10,7 @@ from app.db.session import init_db
 from app.middleware.logging import StructuredLoggingMiddleware
 from app.observability.metrics import get_metrics
 from app.services.jobs.queue import job_queue
+from app.services.llm_provider import check_llm_setup
 from app.services.retention import cleanup_expired_repositories
 from app.db.session import async_session_factory
 
@@ -58,7 +59,7 @@ app.include_router(router)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.2.0", "llm": check_llm_setup()}
 
 
 @app.get("/metrics")

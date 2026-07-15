@@ -1,4 +1,4 @@
-const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
 export interface Repository {
   id: string;
@@ -26,6 +26,27 @@ export interface ChatSource {
   content?: string;
 }
 
+export interface HealthInfo {
+  status: string;
+  version?: string;
+  llm?: {
+    llm_provider: string;
+    embedding_provider: string;
+    lite_mode?: boolean;
+    cost?: string;
+  };
+}
+
+export async function checkHealth(): Promise<HealthInfo | null> {
+  try {
+    const res = await fetch(`${API}/health`);
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function ingestRepo(url: string): Promise<Job> {
   const res = await fetch(`${API}/api/v1/ingest`, {
     method: "POST",
@@ -48,7 +69,10 @@ export async function listRepos(): Promise<{ items: Repository[] }> {
   return res.json();
 }
 
-export async function askQuestion(repoId: string, question: string): Promise<{ answer: string; sources: ChatSource[] }> {
+export async function askQuestion(
+  repoId: string,
+  question: string
+): Promise<{ answer: string; sources: ChatSource[] }> {
   const res = await fetch(`${API}/api/v1/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
