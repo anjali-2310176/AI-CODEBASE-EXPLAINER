@@ -7,11 +7,18 @@ cd "$ROOT"
 
 echo "=== AI Codebase Explainer — Local Mode (no Docker) ==="
 
-# Lite mode config
+# Load .env file first (picks up GEMINI_API_KEY etc.)
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
+# Lite mode overrides (these take priority over .env)
 export LITE_MODE=true
 export DATABASE_URL=sqlite+aiosqlite:///./data/app.db
 export GRAPH_BACKEND=memory
-export LLM_PROVIDER=offline
+export LLM_PROVIDER=gemini
 export REPOS_DIR=./data/repos
 export METADATA_DIR=./data/metadata
 export CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
@@ -64,8 +71,11 @@ echo "  Open: http://localhost:5173"
 echo "  API:  http://localhost:8000/docs"
 echo "============================================"
 echo ""
-echo "Mode: offline code retrieval (no API key needed)"
-echo "For AI-generated text later: add an optional provider in .env"
+if [ -n "$GEMINI_API_KEY" ]; then
+  echo "Mode: Gemini RAG (real AI answers)"
+else
+  echo "Mode: offline code retrieval (set GEMINI_API_KEY in .env for AI answers)"
+fi
 echo ""
 echo "Press Ctrl+C to stop"
 

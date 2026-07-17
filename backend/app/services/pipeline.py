@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -41,6 +42,35 @@ class IngestionPipeline:
 
     def __init__(self) -> None:
         self._executor = ThreadPoolExecutor(max_workers=settings.parse_workers)
+
+    async def _flush_chunks(self, session: AsyncSession, chunks: list) -> None:
+        """Deduplicate and upsert chunks using on_conflict_do_nothing."""
+        seen = set()
+        unique = []
+        for c in chunks:
+            if c.id not in seen:
+                seen.add(c.id)
+                unique.append(c)
+        if not unique:
+            return
+        values = [
+            {
+                "id": c.id,
+                "repository_id": c.repository_id,
+                "file_path": c.file_path,
+                "entity_name": c.entity_name,
+                "entity_type": c.entity_type,
+                "content": c.content,
+                "line_start": c.line_start,
+                "line_end": c.line_end,
+                "embedding": c.embedding,
+            }
+            for c in unique
+        ]
+        stmt = sqlite_insert(RepositoryChunk).values(values).on_conflict_do_nothing()
+        await session.execute(stmt)
+        await session.commit()
+
 
     async def run(
         self,
@@ -132,8 +162,7 @@ class IngestionPipeline:
                     await graph.upsert_relations_batch(session, repo_id, relation_buffer)
                     relation_buffer.clear()
                 if len(chunk_buffer) > 100:
-                    session.add_all(chunk_buffer)
-                    await session.commit()
+                    await self._flush_chunks(session, chunk_buffer)
                     chunk_count += len(chunk_buffer)
                     chunk_buffer.clear()
 
@@ -149,8 +178,7 @@ class IngestionPipeline:
             relation_buffer.clear()
 
             if chunk_buffer:
-                session.add_all(chunk_buffer)
-                await session.commit()
+                await self._flush_chunks(session, chunk_buffer)
                 chunk_count += len(chunk_buffer)
                 chunk_buffer.clear()
 

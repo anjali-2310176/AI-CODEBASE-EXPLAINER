@@ -29,17 +29,28 @@ def check_llm_setup() -> dict:
 
 
 async def generate_answer(context: str, question: str) -> str:
-    """Mocked response for portfolio recording without hitting API limits."""
-    return f"""### Architecture Analysis
+    """Generate an answer using Gemini, or fall back to offline context display."""
+    client = get_gemini_client()
+    if not client:
+        return _offline_fallback(context, question)
 
-Based on the parsed repository, this codebase handles its functionality using well-structured modules.
+    prompt = (
+        "You are a senior software engineer explaining a codebase. "
+        "Answer the question using ONLY the provided code context. "
+        "Be concise, accurate, and reference specific files/functions.\n\n"
+        f"## Code Context\n{context}\n\n"
+        f"## Question\n{question}"
+    )
 
-**Key Components:**
-- The primary data flow starts with the ingestion pipeline.
-- It utilizes the newly migrated SQLite Code Graph for scalable persistent storage.
-- All entities and relations are effectively captured through AST parsing.
-
-*(Mocked response to bypass free-tier API quota for portfolio recording)*"""
+    try:
+        response = client.models.generate_content(
+            model="gemini-flash-latest",
+            contents=prompt,
+        )
+        return response.text or "No response generated."
+    except Exception as e:
+        logger.warning("Gemini API call failed: %s — falling back to offline", e)
+        return _offline_fallback(context, question)
 
 
 def _offline_fallback(context: str, question: str) -> str:
