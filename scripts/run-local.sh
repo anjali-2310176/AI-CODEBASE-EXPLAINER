@@ -45,7 +45,7 @@ uvicorn app.main:app --host 127.0.0.1 --port 8000 &
 BACKEND_PID=$!
 cd ..
 
-sleep 2
+sleep 10
 if ! curl -sf http://127.0.0.1:8000/health >/dev/null; then
   echo "Backend failed to start. Check errors above."
   kill $BACKEND_PID 2>/dev/null || true

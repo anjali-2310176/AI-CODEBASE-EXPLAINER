@@ -29,34 +29,17 @@ def check_llm_setup() -> dict:
 
 
 async def generate_answer(context: str, question: str) -> str:
-    """
-    Generate a grounded answer using Gemini via RAG.
-    Falls back to offline mode if GEMINI_API_KEY is not set.
-    """
-    client = get_gemini_client()
+    """Mocked response for portfolio recording without hitting API limits."""
+    return f"""### Architecture Analysis
 
-    if not client:
-        return _offline_fallback(context, question)
+Based on the parsed repository, this codebase handles its functionality using well-structured modules.
 
-    prompt = (
-        "You are an expert AI Codebase Explainer.\n"
-        "Answer the user's question based ONLY on the retrieved code context below.\n"
-        "If the context does not contain enough information, say so clearly.\n"
-        "Use markdown and code blocks where relevant.\n\n"
-        f"## Retrieved Code Context\n{context}\n\n"
-        f"## Question\n{question}\n\n"
-        "## Answer"
-    )
+**Key Components:**
+- The primary data flow starts with the ingestion pipeline.
+- It utilizes the newly migrated SQLite Code Graph for scalable persistent storage.
+- All entities and relations are effectively captured through AST parsing.
 
-    try:
-        response = await client.aio.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        return response.text
-    except Exception as e:
-        logger.exception("Gemini API call failed")
-        return f"**Gemini API error:** {e}\n\n" + _offline_fallback(context, question)
+*(Mocked response to bypass free-tier API quota for portfolio recording)*"""
 
 
 def _offline_fallback(context: str, question: str) -> str:

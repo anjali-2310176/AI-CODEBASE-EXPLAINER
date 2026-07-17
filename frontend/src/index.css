@@ -64,14 +64,36 @@ body {
   position: relative;
 }
 
-/* ─── Background Design ─── */
+/* ─── Watery Flowy Background ─── */
 body::before {
   content: "";
   position: fixed;
-  inset: 0;
+  top: 50%;
+  left: 50%;
+  width: 120vw;
+  height: 120vh;
+  transform: translate(-50%, -50%);
   z-index: -2;
-  background: radial-gradient(circle at center, #c3edb0 0%, transparent 55%);
-  opacity: 0.6;
+  background: radial-gradient(circle at center, #c3edb0 0%, #e0f8d8 30%, transparent 65%);
+  opacity: 0.7;
+  filter: blur(60px);
+  animation: wateryFlow 15s infinite alternate ease-in-out;
+  border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
+}
+
+@keyframes wateryFlow {
+  0% { 
+    transform: translate(-50%, -50%) rotate(0deg) scale(1); 
+    border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; 
+  }
+  50% { 
+    transform: translate(-48%, -52%) rotate(10deg) scale(1.05); 
+    border-radius: 60% 40% 30% 70% / 50% 60% 50% 40%; 
+  }
+  100% { 
+    transform: translate(-52%, -48%) rotate(0deg) scale(1); 
+    border-radius: 30% 70% 50% 50% / 60% 40% 40% 60%; 
+  }
 }
 
 body::after {
@@ -82,7 +104,7 @@ body::after {
   background-image: 
     linear-gradient(to right, rgba(79, 70, 229, 0.02) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(79, 70, 229, 0.02) 1px, transparent 1px);
-  background-size: 40px 40px;
+  background-size: 60px 60px;
   mask-image: radial-gradient(circle at center, black, transparent 90%);
   -webkit-mask-image: radial-gradient(circle at center, black, transparent 90%);
 }
@@ -257,15 +279,20 @@ body::after {
   50% { opacity: 0.7; transform: scale(0.95); }
 }
 
-/* ─── Cards ─── */
+/* ─── Glassy Cards ─── */
 .card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-light);
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   margin-bottom: var(--space-3);
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03), 0 0 3px rgba(0,0,0,0.02);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 
+    0 10px 30px -10px rgba(0, 0, 0, 0.05), 
+    0 4px 10px rgba(0,0,0,0.02),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease;
   position: relative;
   overflow: hidden;
 }
@@ -275,16 +302,20 @@ body::after {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 4px;
-  background-color: var(--accent-light);
+  background: linear-gradient(90deg, var(--accent-light), var(--accent-primary), var(--accent-light));
   transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 0.4s ease;
+  transform-origin: center;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 30px -4px rgba(79, 70, 229, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
-  border-color: var(--border-focus);
+  transform: translateY(-4px) scale(1.005);
+  box-shadow: 
+    0 20px 40px -10px rgba(79, 70, 229, 0.12), 
+    0 8px 16px -4px rgba(0, 0, 0, 0.04),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.75);
 }
 
 .card:hover::before {
@@ -308,21 +339,24 @@ body::after {
 .input {
   flex: 1;
   min-width: 250px;
-  padding: 12px 16px;
-  border: 1px solid var(--border-light);
+  padding: 14px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
   border-radius: var(--radius-sm);
-  background-color: var(--bg-subtle);
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--text-primary);
   font-family: var(--font);
-  font-size: 0.95rem;
-  transition: all 0.2s ease;
+  font-size: 1rem;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02), 0 2px 8px rgba(0,0,0,0.02);
 }
 .input::placeholder { color: var(--text-tertiary); }
 .input:focus {
   outline: none;
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 4px var(--accent-glow);
-  background-color: var(--bg-card);
+  box-shadow: 0 0 0 4px var(--accent-glow), inset 0 2px 4px rgba(0,0,0,0.02);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 /* ─── Buttons ─── */
@@ -347,27 +381,30 @@ body::after {
 .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; }
 
 .btn-primary { 
-  background-color: var(--accent-primary); 
+  background: linear-gradient(135deg, var(--accent-primary), #6366f1);
   color: #fff; 
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25), 0 2px 4px rgba(79, 70, 229, 0.15);
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3), 0 2px 4px rgba(79, 70, 229, 0.2), inset 0 1px 1px rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.1);
 }
 .btn-primary:hover:not(:disabled) { 
-  background-color: var(--accent-hover); 
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(79, 70, 229, 0.35), 0 4px 8px rgba(79, 70, 229, 0.2);
+  background: linear-gradient(135deg, var(--accent-hover), #4f46e5);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4), 0 4px 8px rgba(79, 70, 229, 0.2), inset 0 1px 1px rgba(255,255,255,0.3);
 }
 
 .btn-secondary {
-  background-color: var(--bg-card);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--text-primary);
-  border-color: var(--border-light);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03), inset 0 1px 1px rgba(255,255,255,0.8);
 }
 .btn-secondary:hover:not(:disabled) { 
-  background-color: var(--bg-subtle); 
-  border-color: var(--border-focus);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.8); 
+  border-color: rgba(255, 255, 255, 1);
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255,255,255,1);
 }
 
 /* ─── Workflow Sequence ─── */
